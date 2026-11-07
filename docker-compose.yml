@@ -11,23 +11,47 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./tienda_deportes_estructura.sql:/scripts/tienda_deportes_estructura.sql:ro
+      - ./tienda_deportes_logica.sql:/scripts/tienda_deportes_logica.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  backend:
+  api:
+    build:
+      context: ./Backend/TiendaDeportes.Api
+      dockerfile: Dockerfile
+    container_name: tienda_deportes_api
+    environment:
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=tienda_deportes;Username=postgres;Password=postgres"
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    container_name: tienda_deportes_frontend
+    ports:
+      - "8088:80"
+    depends_on:
+      - api
+
+  # Consola de prueba rápida (opcional): docker compose run --rm console
+  console:
     build:
       context: ./Backend/TiendaDeportes.Console
       dockerfile: Dockerfile
-    container_name: tienda_deportes_backend
+    profiles: ["console"]
     environment:
       ConnectionStrings__Default: "Host=db;Port=5432;Database=tienda_deportes;Username=postgres;Password=postgres"
     depends_on:
       db:
         condition: service_healthy
-    restart: "no"
 
 volumes:
   pgdata:

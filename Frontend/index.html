@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tienda Deportes — Panel CRUD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="atmosphere" aria-hidden="true"></div>
+
+  <header class="hero">
+    <p class="eyebrow">Panel operativo · PostgreSQL + C#</p>
+    <h1>Tienda Deportes</h1>
+    <p class="lede">CRUD de productos y clientes sin que el programa se cancele. Los errores de BD se muestran aquí.</p>
+  </header>
+
+  <main class="shell">
+    <div id="toast" class="toast" hidden></div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab is-active" data-tab="productos" type="button">Productos</button>
+      <button class="tab" data-tab="clientes" type="button">Clientes</button>
+    </nav>
+
+    <section id="panel-productos" class="panel is-active">
+      <div class="panel-head">
+        <h2>Productos</h2>
+        <p>Crear, listar, editar, actualizar y eliminar. Al cambiar precio se dispara la auditoría.</p>
+      </div>
+
+      <form id="form-producto" class="crud-form">
+        <input type="hidden" id="producto-id" />
+        <label>Nombre<input id="producto-nombre" required maxlength="100" placeholder="Ej. Guayos Mercurial" /></label>
+        <label>Precio<input id="producto-precio" type="number" step="0.01" min="0.01" required placeholder="350000" /></label>
+        <label>Stock<input id="producto-stock" type="number" min="0" required value="0" /></label>
+        <label>Categoría<select id="producto-categoria" required></select></label>
+        <label>Marca<select id="producto-marca" required></select></label>
+        <div class="form-actions">
+          <button type="submit" id="btn-producto-guardar" class="btn primary">Crear</button>
+          <button type="button" id="btn-producto-cancelar" class="btn ghost" hidden>Cancelar edición</button>
+        </div>
+      </form>
+
+      <div id="lista-productos" class="cards"></div>
+    </section>
+
+    <section id="panel-clientes" class="panel">
+      <div class="panel-head">
+        <h2>Clientes</h2>
+        <p>CRUD con cédula como PK. Duplicados y borrados con ventas muestran el SqlState.</p>
+      </div>
+
+      <form id="form-cliente" class="crud-form">
+        <input type="hidden" id="cliente-mode" value="create" />
+        <label>Cédula<input id="cliente-cedula" required maxlength="15" placeholder="1001234567" /></label>
+        <label>Nombre<input id="cliente-nombre" required maxlength="100" placeholder="Carlos Pérez" /></label>
+        <label>Email<input id="cliente-email" type="email" maxlength="100" placeholder="correo@ejemplo.com" /></label>
+        <label>Teléfono<input id="cliente-telefono" maxlength="20" placeholder="3001112233" /></label>
+        <div class="form-actions">
+          <button type="submit" id="btn-cliente-guardar" class="btn primary">Crear</button>
+          <button type="button" id="btn-cliente-cancelar" class="btn ghost" hidden>Cancelar edición</button>
+        </div>
+      </form>
+
+      <div id="lista-clientes" class="cards"></div>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
