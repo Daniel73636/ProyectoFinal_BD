@@ -52,7 +52,9 @@ public class ProductoService(IConfiguration config)
             VALUES (@nombre, @precio, @stock, @id_categoria, @id_marca)
             RETURNING id_producto;
             """, conn);
-        cmd.Parameters.AddWithValue("nombre", dto.Nombre.Trim());
+        // nombre vacío -> NULL para que dispare NOT NULL en PostgreSQL
+        cmd.Parameters.AddWithValue("nombre",
+            string.IsNullOrWhiteSpace(dto.Nombre) ? DBNull.Value : dto.Nombre.Trim());
         cmd.Parameters.AddWithValue("precio", dto.Precio);
         cmd.Parameters.AddWithValue("stock", dto.Stock);
         cmd.Parameters.AddWithValue("id_categoria", dto.IdCategoria);
@@ -75,7 +77,8 @@ public class ProductoService(IConfiguration config)
             WHERE id_producto = @id;
             """, conn);
         cmd.Parameters.AddWithValue("id", id);
-        cmd.Parameters.AddWithValue("nombre", dto.Nombre.Trim());
+        cmd.Parameters.AddWithValue("nombre",
+            string.IsNullOrWhiteSpace(dto.Nombre) ? DBNull.Value : dto.Nombre.Trim());
         cmd.Parameters.AddWithValue("precio", dto.Precio);
         cmd.Parameters.AddWithValue("stock", dto.Stock);
         cmd.Parameters.AddWithValue("id_categoria", dto.IdCategoria);

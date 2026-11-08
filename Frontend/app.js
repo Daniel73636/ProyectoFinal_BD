@@ -1,17 +1,52 @@
 const API = typeof window.API_BASE === "string" ? window.API_BASE : "http://localhost:8080";
 
-const toastEl = document.getElementById("toast");
 let categorias = [];
 let marcas = [];
-let productoEditId = null;
-let clienteEditCedula = null;
+let confirmAction = null;
 
-function showToast(mensaje, tipo = "error") {
-  toastEl.hidden = false;
-  toastEl.className = `toast ${tipo}`;
-  toastEl.textContent = mensaje;
-  clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => { toastEl.hidden = true; }, 6000);
+const notifyStack = document.getElementById("notify-stack");
+
+function notify(mensaje, tipo = "error", titulo) {
+  const titles = {
+    ok: "Listo",
+    error: "Error de base de datos",
+    info: "Aviso",
+    warn: "Atención"
+  };
+  const icons = { ok: "✓", error: "!", info: "i", warn: "!" };
+
+  const el = document.createElement("div");
+  el.className = `notify ${tipo}`;
+  el.innerHTML = `
+    <div class="notify-icon">${icons[tipo] || "!"}</div>
+    <div class="notify-body">
+      <p class="notify-title">${titulo || titles[tipo] || "Aviso"}</p>
+      <p class="notify-text">${escapeHtml(mensaje)}</p>
+    </div>
+    <button type="button" class="notify-close" aria-label="Cerrar">×</button>
+  `;
+
+  const close = () => {
+    el.classList.add("out");
+    setTimeout(() => el.remove(), 200);
+  };
+
+  el.querySelector(".notify-close").addEventListener("click", close);
+  notifyStack.appendChild(el);
+  setTimeout(close, tipo === "error" ? 9000 : 4200);
+}
+
+/** Muestra código SqlState + tipo + motivo tal como viene del backend. */
+function notifyDbError(data, fallbackStatus) {
+  if (data?.sqlState || data?.mensaje) {
+    const codigo = data.sqlState || "SIN_CODIGO";
+    const tipo = data.tipo || "ERROR";
+    const titulo = `Error ${codigo}`;
+    const mensaje = `(${tipo}) ${data.mensaje || "Error de PostgreSQL."}`;
+    notify(mensaje, "error", titulo);
+    return;
+  }
+  notify(`Error HTTP ${fallbackStatus}`, "error");
 }
 
 async function api(path, options = {}) {
@@ -27,23 +62,69 @@ async function api(path, options = {}) {
     const data = text ? JSON.parse(text) : null;
 
     if (!res.ok) {
-      const msg = data?.mensaje
-        ? `[${data.sqlState || "ERR"} · ${data.tipo || "ERROR"}] ${data.mensaje}`
-        : `Error HTTP ${res.status}`;
-      showToast(msg, "error");
+      notifyDbError(data, res.status);
       return { ok: false, data };
     }
 
     return { ok: true, data };
   } catch (err) {
-    showToast(`Error controlado (programa no cancela): ${err.message}`, "error");
+    notify(`Error controlado (el programa no cancela): ${err.message}`, "error");
     return { ok: false, data: null };
   }
 }
 
 function money(n) {
-  return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0
+  }).format(n);
 }
+
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function openModal(name) {
+  document.getElementById(`modal-${name}`).hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+function closeModal(name) {
+  const el = document.getElementById(`modal-${name}`);
+  if (el) el.hidden = true;
+  if ([...document.querySelectorAll(".modal")].every((m) => m.hidden)) {
+    document.body.classList.remove("modal-open");
+  }
+}
+
+document.querySelectorAll("[data-close-modal]").forEach((btn) => {
+  btn.addEventListener("click", () => closeModal(btn.getAttribute("data-close-modal")));
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    ["producto", "cliente", "confirm"].forEach(closeModal);
+  }
+});
+
+function askConfirm({ title, message, onConfirm }) {
+  document.getElementById("confirm-title").textContent = title || "Confirmar";
+  document.getElementById("confirm-message").textContent = message;
+  confirmAction = onConfirm;
+  openModal("confirm");
+}
+
+document.getElementById("confirm-ok").addEventListener("click", async () => {
+  const action = confirmAction;
+  confirmAction = null;
+  closeModal("confirm");
+  if (action) await action();
+});
 
 /* Tabs */
 document.querySelectorAll(".tab").forEach((btn) => {
@@ -55,19 +136,19 @@ document.querySelectorAll(".tab").forEach((btn) => {
   });
 });
 
-/* Catalogos */
+function fillSelect(select, items) {
+  select.innerHTML = items.map((x) => `<option value="${x.id}">${escapeHtml(x.nombre)}</option>`).join("");
+}
+
 async function cargarCatalogos() {
-  const [c, m] = await Promise.all([
-    api("/api/categorias"),
-    api("/api/marcas")
-  ]);
+  const [c, m] = await Promise.all([api("/api/categorias"), api("/api/marcas")]);
   if (c.ok) categorias = c.data;
   if (m.ok) marcas = m.data;
 
-  const catSel = document.getElementById("producto-categoria");
-  const marSel = document.getElementById("producto-marca");
-  catSel.innerHTML = categorias.map((x) => `<option value="${x.id}">${x.nombre}</option>`).join("");
-  marSel.innerHTML = marcas.map((x) => `<option value="${x.id}">${x.nombre}</option>`).join("");
+  fillSelect(document.getElementById("producto-categoria"), categorias);
+  fillSelect(document.getElementById("producto-marca"), marcas);
+  fillSelect(document.getElementById("edit-producto-categoria"), categorias);
+  fillSelect(document.getElementById("edit-producto-marca"), marcas);
 }
 
 /* Productos */
@@ -88,63 +169,47 @@ async function cargarProductos() {
         <span>ID ${p.idProducto}</span>
       </div>
       <div class="card-actions">
-        <button class="btn edit small" data-edit-producto='${JSON.stringify(p)}'>Editar</button>
-        <button class="btn update small" data-actualizar-producto="${p.idProducto}">Actualizar</button>
-        <button class="btn delete small" data-delete-producto="${p.idProducto}">Eliminar</button>
+        <button type="button" class="btn-uiverse edit small" data-edit-producto="${p.idProducto}">Editar</button>
+        <button type="button" class="btn-uiverse soft-danger small" data-delete-producto="${p.idProducto}">Eliminar</button>
       </div>
     </article>
   `).join("");
 
   box.querySelectorAll("[data-edit-producto]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const p = JSON.parse(btn.getAttribute("data-edit-producto"));
-      productoEditId = p.idProducto;
-      document.getElementById("producto-id").value = p.idProducto;
-      document.getElementById("producto-nombre").value = p.nombre;
-      document.getElementById("producto-precio").value = p.precio;
-      document.getElementById("producto-stock").value = p.stock;
-      document.getElementById("producto-categoria").value = p.idCategoria;
-      document.getElementById("producto-marca").value = p.idMarca;
-      document.getElementById("btn-producto-guardar").textContent = "Actualizar";
-      document.getElementById("btn-producto-cancelar").hidden = false;
-      showToast(`Editando producto #${p.idProducto}. Cambia datos y pulsa Actualizar.`, "ok");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
-  });
-
-  box.querySelectorAll("[data-actualizar-producto]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = Number(btn.getAttribute("data-actualizar-producto"));
-      const card = data.find((x) => x.idProducto === id);
-      if (!card) return;
-      productoEditId = card.idProducto;
-      document.getElementById("producto-id").value = card.idProducto;
-      document.getElementById("producto-nombre").value = card.nombre;
-      document.getElementById("producto-precio").value = card.precio;
-      document.getElementById("producto-stock").value = card.stock;
-      document.getElementById("producto-categoria").value = card.idCategoria;
-      document.getElementById("producto-marca").value = card.idMarca;
-      document.getElementById("btn-producto-guardar").textContent = "Actualizar";
-      document.getElementById("btn-producto-cancelar").hidden = false;
-      document.getElementById("form-producto").requestSubmit();
+      const p = data.find((x) => String(x.idProducto) === btn.getAttribute("data-edit-producto"));
+      if (!p) return;
+      document.getElementById("edit-producto-id").value = p.idProducto;
+      document.getElementById("edit-producto-nombre").value = p.nombre;
+      document.getElementById("edit-producto-precio").value = p.precio;
+      document.getElementById("edit-producto-stock").value = p.stock;
+      document.getElementById("edit-producto-categoria").value = p.idCategoria;
+      document.getElementById("edit-producto-marca").value = p.idMarca;
+      openModal("producto");
     });
   });
 
   box.querySelectorAll("[data-delete-producto]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-delete-producto");
-      if (!confirm(`¿Eliminar producto #${id}?`)) return;
-      const res = await api(`/api/productos/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        showToast("Producto eliminado.", "ok");
-        await cargarProductos();
-      }
+      askConfirm({
+        title: "Eliminar producto",
+        message: `¿Seguro que quieres eliminar el producto #${id}? Si tiene ventas asociadas, la BD responderá con error RESTRICT (23001).`,
+        onConfirm: async () => {
+          const res = await api(`/api/productos/${id}`, { method: "DELETE" });
+          if (res.ok) {
+            notify("Producto eliminado correctamente.", "ok");
+            await cargarProductos();
+          }
+        }
+      });
     });
   });
 }
 
 document.getElementById("form-producto").addEventListener("submit", async (e) => {
   e.preventDefault();
+  // Se envía tal cual a la BD: CHECK, NOT NULL, FK, etc. los valida PostgreSQL.
   const body = {
     nombre: document.getElementById("producto-nombre").value.trim(),
     precio: Number(document.getElementById("producto-precio").value),
@@ -153,43 +218,35 @@ document.getElementById("form-producto").addEventListener("submit", async (e) =>
     idMarca: Number(document.getElementById("producto-marca").value)
   };
 
-  if (Number.isNaN(body.precio) || Number.isNaN(body.stock)) {
-    showToast("[22P02 · TIPO_DATO] Precio o stock no son numéricos válidos.", "error");
-    return;
-  }
-
-  let res;
-  if (productoEditId) {
-    res = await api(`/api/productos/${productoEditId}`, {
-      method: "PUT",
-      body: JSON.stringify(body)
-    });
-    if (res.ok) showToast("Producto actualizado.", "ok");
-  } else {
-    res = await api("/api/productos", {
-      method: "POST",
-      body: JSON.stringify(body)
-    });
-    if (res.ok) showToast("Producto creado.", "ok");
-  }
-
+  const res = await api("/api/productos", { method: "POST", body: JSON.stringify(body) });
   if (res.ok) {
-    resetProductoForm();
+    notify("Producto creado.", "ok");
+    e.target.reset();
+    document.getElementById("producto-stock").value = 0;
+    if (categorias[0]) document.getElementById("producto-categoria").value = categorias[0].id;
+    if (marcas[0]) document.getElementById("producto-marca").value = marcas[0].id;
     await cargarProductos();
   }
 });
 
-document.getElementById("btn-producto-cancelar").addEventListener("click", resetProductoForm);
+document.getElementById("form-producto-edit").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("edit-producto-id").value;
+  const body = {
+    nombre: document.getElementById("edit-producto-nombre").value.trim(),
+    precio: Number(document.getElementById("edit-producto-precio").value),
+    stock: Number(document.getElementById("edit-producto-stock").value),
+    idCategoria: Number(document.getElementById("edit-producto-categoria").value),
+    idMarca: Number(document.getElementById("edit-producto-marca").value)
+  };
 
-function resetProductoForm() {
-  productoEditId = null;
-  document.getElementById("form-producto").reset();
-  document.getElementById("producto-id").value = "";
-  document.getElementById("btn-producto-guardar").textContent = "Crear";
-  document.getElementById("btn-producto-cancelar").hidden = true;
-  if (categorias[0]) document.getElementById("producto-categoria").value = categorias[0].id;
-  if (marcas[0]) document.getElementById("producto-marca").value = marcas[0].id;
-}
+  const res = await api(`/api/productos/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  if (res.ok) {
+    notify("Producto actualizado. Si cambió el precio, se registró en auditoría.", "ok", "Actualizado");
+    closeModal("producto");
+    await cargarProductos();
+  }
+});
 
 /* Clientes */
 async function cargarClientes() {
@@ -209,105 +266,79 @@ async function cargarClientes() {
         <span>${escapeHtml(c.telefono || "Sin teléfono")}</span>
       </div>
       <div class="card-actions">
-        <button class="btn edit small" data-edit-cliente='${JSON.stringify(c)}'>Editar</button>
-        <button class="btn update small" data-actualizar-cliente="${escapeHtml(c.cedula)}">Actualizar</button>
-        <button class="btn delete small" data-delete-cliente="${escapeHtml(c.cedula)}">Eliminar</button>
+        <button type="button" class="btn-uiverse edit small" data-edit-cliente="${escapeHtml(c.cedula)}">Editar</button>
+        <button type="button" class="btn-uiverse soft-danger small" data-delete-cliente="${escapeHtml(c.cedula)}">Eliminar</button>
       </div>
     </article>
   `).join("");
 
   box.querySelectorAll("[data-edit-cliente]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const c = JSON.parse(btn.getAttribute("data-edit-cliente"));
-      fillClienteForm(c, true);
-      showToast(`Editando cliente ${c.cedula}. Cambia datos y pulsa Actualizar.`, "ok");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
-  });
-
-  box.querySelectorAll("[data-actualizar-cliente]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const cedula = btn.getAttribute("data-actualizar-cliente");
-      const c = data.find((x) => x.cedula === cedula);
+      const c = data.find((x) => x.cedula === btn.getAttribute("data-edit-cliente"));
       if (!c) return;
-      fillClienteForm(c, true);
-      document.getElementById("form-cliente").requestSubmit();
+      document.getElementById("edit-cliente-cedula").value = c.cedula;
+      document.getElementById("edit-cliente-nombre").value = c.nombre;
+      document.getElementById("edit-cliente-email").value = c.email || "";
+      document.getElementById("edit-cliente-telefono").value = c.telefono || "";
+      openModal("cliente");
     });
   });
 
   box.querySelectorAll("[data-delete-cliente]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", () => {
       const cedula = btn.getAttribute("data-delete-cliente");
-      if (!confirm(`¿Eliminar cliente ${cedula}?`)) return;
-      const res = await api(`/api/clientes/${encodeURIComponent(cedula)}`, { method: "DELETE" });
-      if (res.ok) {
-        showToast("Cliente eliminado.", "ok");
-        await cargarClientes();
-      }
+      askConfirm({
+        title: "Eliminar cliente",
+        message: `¿Eliminar al cliente con cédula ${cedula}? Si tiene ventas, verás violación de integridad referencial (23001).`,
+        onConfirm: async () => {
+          const res = await api(`/api/clientes/${encodeURIComponent(cedula)}`, { method: "DELETE" });
+          if (res.ok) {
+            notify("Cliente eliminado correctamente.", "ok");
+            await cargarClientes();
+          }
+        }
+      });
     });
   });
 }
 
-function fillClienteForm(c, editing) {
-  clienteEditCedula = editing ? c.cedula : null;
-  document.getElementById("cliente-mode").value = editing ? "edit" : "create";
-  document.getElementById("cliente-cedula").value = c.cedula;
-  document.getElementById("cliente-cedula").disabled = !!editing;
-  document.getElementById("cliente-nombre").value = c.nombre;
-  document.getElementById("cliente-email").value = c.email || "";
-  document.getElementById("cliente-telefono").value = c.telefono || "";
-  document.getElementById("btn-cliente-guardar").textContent = editing ? "Actualizar" : "Crear";
-  document.getElementById("btn-cliente-cancelar").hidden = !editing;
-}
-
 document.getElementById("form-cliente").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const cedula = document.getElementById("cliente-cedula").value.trim();
   const body = {
+    cedula: document.getElementById("cliente-cedula").value.trim(),
     nombre: document.getElementById("cliente-nombre").value.trim(),
     email: document.getElementById("cliente-email").value.trim() || null,
     telefono: document.getElementById("cliente-telefono").value.trim() || null
   };
 
-  let res;
-  if (clienteEditCedula) {
-    res = await api(`/api/clientes/${encodeURIComponent(clienteEditCedula)}`, {
-      method: "PUT",
-      body: JSON.stringify(body)
-    });
-    if (res.ok) showToast("Cliente actualizado.", "ok");
-  } else {
-    res = await api("/api/clientes", {
-      method: "POST",
-      body: JSON.stringify({ cedula, ...body })
-    });
-    if (res.ok) showToast("Cliente creado.", "ok");
-  }
-
+  const res = await api("/api/clientes", { method: "POST", body: JSON.stringify(body) });
   if (res.ok) {
-    resetClienteForm();
+    notify("Cliente creado.", "ok");
+    e.target.reset();
     await cargarClientes();
   }
 });
 
-document.getElementById("btn-cliente-cancelar").addEventListener("click", resetClienteForm);
+document.getElementById("form-cliente-edit").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const cedula = document.getElementById("edit-cliente-cedula").value;
+  const body = {
+    nombre: document.getElementById("edit-cliente-nombre").value.trim(),
+    email: document.getElementById("edit-cliente-email").value.trim() || null,
+    telefono: document.getElementById("edit-cliente-telefono").value.trim() || null
+  };
 
-function resetClienteForm() {
-  clienteEditCedula = null;
-  document.getElementById("form-cliente").reset();
-  document.getElementById("cliente-cedula").disabled = false;
-  document.getElementById("cliente-mode").value = "create";
-  document.getElementById("btn-cliente-guardar").textContent = "Crear";
-  document.getElementById("btn-cliente-cancelar").hidden = true;
-}
+  const res = await api(`/api/clientes/${encodeURIComponent(cedula)}`, {
+    method: "PUT",
+    body: JSON.stringify(body)
+  });
 
-function escapeHtml(str) {
-  return String(str)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
+  if (res.ok) {
+    notify("Cliente actualizado.", "ok", "Actualizado");
+    closeModal("cliente");
+    await cargarClientes();
+  }
+});
 
 (async function init() {
   await cargarCatalogos();

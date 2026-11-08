@@ -9,6 +9,10 @@ public class ClienteService(IConfiguration config)
         config.GetConnectionString("Default")
         ?? "Host=localhost;Port=5432;Database=tienda_deportes;Username=postgres;Password=postgres";
 
+    // Vacío/null -> DBNull para que PostgreSQL aplique NOT NULL (no lo evitamos en C#).
+    private static object DbOrNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? DBNull.Value : value.Trim();
+
     public async Task<IReadOnlyList<Cliente>> ListarAsync()
     {
         await using var conn = new NpgsqlConnection(Cs);
@@ -45,10 +49,10 @@ public class ClienteService(IConfiguration config)
             INSERT INTO cliente (cedula, nombre, email, telefono)
             VALUES (@cedula, @nombre, @email, @telefono);
             """, conn);
-        cmd.Parameters.AddWithValue("cedula", dto.Cedula.Trim());
-        cmd.Parameters.AddWithValue("nombre", dto.Nombre.Trim());
-        cmd.Parameters.AddWithValue("email", (object?)dto.Email?.Trim() ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("telefono", (object?)dto.Telefono?.Trim() ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("cedula", DbOrNull(dto.Cedula));
+        cmd.Parameters.AddWithValue("nombre", DbOrNull(dto.Nombre));
+        cmd.Parameters.AddWithValue("email", DbOrNull(dto.Email));
+        cmd.Parameters.AddWithValue("telefono", DbOrNull(dto.Telefono));
         await cmd.ExecuteNonQueryAsync();
     }
 
@@ -63,9 +67,9 @@ public class ClienteService(IConfiguration config)
             WHERE cedula = @cedula;
             """, conn);
         cmd.Parameters.AddWithValue("cedula", cedula);
-        cmd.Parameters.AddWithValue("nombre", dto.Nombre.Trim());
-        cmd.Parameters.AddWithValue("email", (object?)dto.Email?.Trim() ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("telefono", (object?)dto.Telefono?.Trim() ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("nombre", DbOrNull(dto.Nombre));
+        cmd.Parameters.AddWithValue("email", DbOrNull(dto.Email));
+        cmd.Parameters.AddWithValue("telefono", DbOrNull(dto.Telefono));
         return await cmd.ExecuteNonQueryAsync() > 0;
     }
 

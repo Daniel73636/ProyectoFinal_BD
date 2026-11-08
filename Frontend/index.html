@@ -11,16 +11,15 @@
 </head>
 <body>
   <div class="atmosphere" aria-hidden="true"></div>
+  <div id="notify-stack" class="notify-stack" aria-live="polite"></div>
 
   <header class="hero">
     <p class="eyebrow">Panel operativo · PostgreSQL + C#</p>
     <h1>Tienda Deportes</h1>
-    <p class="lede">CRUD de productos y clientes sin que el programa se cancele. Los errores de BD se muestran aquí.</p>
+    <p class="lede">CRUD de productos y clientes sin que el programa se cancele. Los errores de BD se muestran en notificaciones.</p>
   </header>
 
   <main class="shell">
-    <div id="toast" class="toast" hidden></div>
-
     <nav class="tabs" role="tablist">
       <button class="tab is-active" data-tab="productos" type="button">Productos</button>
       <button class="tab" data-tab="clientes" type="button">Clientes</button>
@@ -28,20 +27,23 @@
 
     <section id="panel-productos" class="panel is-active">
       <div class="panel-head">
-        <h2>Productos</h2>
-        <p>Crear, listar, editar, actualizar y eliminar. Al cambiar precio se dispara la auditoría.</p>
+        <div>
+          <h2>Productos</h2>
+          <p>Crear abajo. Editar y eliminar desde cada tarjeta (modal). Cambiar precio dispara auditoría.</p>
+        </div>
       </div>
 
-      <form id="form-producto" class="crud-form">
-        <input type="hidden" id="producto-id" />
-        <label>Nombre<input id="producto-nombre" required maxlength="100" placeholder="Ej. Guayos Mercurial" /></label>
-        <label>Precio<input id="producto-precio" type="number" step="0.01" min="0.01" required placeholder="350000" /></label>
-        <label>Stock<input id="producto-stock" type="number" min="0" required value="0" /></label>
+      <form id="form-producto" class="crud-form create-only">
+        <div class="form-title">Nuevo producto</div>
+        <label>Nombre<input id="producto-nombre" maxlength="100" placeholder="Ej. Guayos Mercurial" /></label>
+        <label>Precio<input id="producto-precio" type="number" step="0.01" placeholder="350000" /></label>
+        <label>Stock<input id="producto-stock" type="number" value="0" /></label>
         <label>Categoría<select id="producto-categoria" required></select></label>
         <label>Marca<select id="producto-marca" required></select></label>
         <div class="form-actions">
-          <button type="submit" id="btn-producto-guardar" class="btn primary">Crear</button>
-          <button type="button" id="btn-producto-cancelar" class="btn ghost" hidden>Cancelar edición</button>
+          <button type="submit" class="btn-uiverse primary">
+            <span>Crear producto</span>
+          </button>
         </div>
       </form>
 
@@ -50,25 +52,88 @@
 
     <section id="panel-clientes" class="panel">
       <div class="panel-head">
-        <h2>Clientes</h2>
-        <p>CRUD con cédula como PK. Duplicados y borrados con ventas muestran el SqlState.</p>
+        <div>
+          <h2>Clientes</h2>
+          <p>Crear abajo. Editar/eliminar en modal. Duplicados y RESTRICT muestran SqlState.</p>
+        </div>
       </div>
 
-      <form id="form-cliente" class="crud-form">
-        <input type="hidden" id="cliente-mode" value="create" />
-        <label>Cédula<input id="cliente-cedula" required maxlength="15" placeholder="1001234567" /></label>
-        <label>Nombre<input id="cliente-nombre" required maxlength="100" placeholder="Carlos Pérez" /></label>
+      <form id="form-cliente" class="crud-form create-only">
+        <div class="form-title">Nuevo cliente</div>
+        <label>Cédula<input id="cliente-cedula" maxlength="15" placeholder="1001234567" /></label>
+        <label>Nombre<input id="cliente-nombre" maxlength="100" placeholder="Carlos Pérez" /></label>
         <label>Email<input id="cliente-email" type="email" maxlength="100" placeholder="correo@ejemplo.com" /></label>
         <label>Teléfono<input id="cliente-telefono" maxlength="20" placeholder="3001112233" /></label>
         <div class="form-actions">
-          <button type="submit" id="btn-cliente-guardar" class="btn primary">Crear</button>
-          <button type="button" id="btn-cliente-cancelar" class="btn ghost" hidden>Cancelar edición</button>
+          <button type="submit" class="btn-uiverse primary">
+            <span>Crear cliente</span>
+          </button>
         </div>
       </form>
 
       <div id="lista-clientes" class="cards"></div>
     </section>
   </main>
+
+  <!-- Modal editar producto -->
+  <div id="modal-producto" class="modal" hidden>
+    <div class="modal-backdrop" data-close-modal="producto"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-producto-title">
+      <header class="modal-head">
+        <h3 id="modal-producto-title">Editar producto</h3>
+        <button type="button" class="modal-x" data-close-modal="producto" aria-label="Cerrar">×</button>
+      </header>
+      <form id="form-producto-edit" class="modal-form">
+        <input type="hidden" id="edit-producto-id" />
+        <label>Nombre<input id="edit-producto-nombre" maxlength="100" /></label>
+        <label>Precio<input id="edit-producto-precio" type="number" step="0.01" /></label>
+        <label>Stock<input id="edit-producto-stock" type="number" /></label>
+        <label>Categoría<select id="edit-producto-categoria" required></select></label>
+        <label>Marca<select id="edit-producto-marca" required></select></label>
+        <div class="modal-actions">
+          <button type="button" class="btn-uiverse ghost" data-close-modal="producto">Cancelar</button>
+          <button type="submit" class="btn-uiverse primary"><span>Actualizar</span></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal editar cliente -->
+  <div id="modal-cliente" class="modal" hidden>
+    <div class="modal-backdrop" data-close-modal="cliente"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-cliente-title">
+      <header class="modal-head">
+        <h3 id="modal-cliente-title">Editar cliente</h3>
+        <button type="button" class="modal-x" data-close-modal="cliente" aria-label="Cerrar">×</button>
+      </header>
+      <form id="form-cliente-edit" class="modal-form">
+        <label>Cédula<input id="edit-cliente-cedula" maxlength="15" disabled /></label>
+        <label>Nombre<input id="edit-cliente-nombre" maxlength="100" /></label>
+        <label>Email<input id="edit-cliente-email" type="email" maxlength="100" /></label>
+        <label>Teléfono<input id="edit-cliente-telefono" maxlength="20" /></label>
+        <div class="modal-actions">
+          <button type="button" class="btn-uiverse ghost" data-close-modal="cliente">Cancelar</button>
+          <button type="submit" class="btn-uiverse primary"><span>Actualizar</span></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal confirmar eliminación -->
+  <div id="modal-confirm" class="modal" hidden>
+    <div class="modal-backdrop" data-close-modal="confirm"></div>
+    <div class="modal-card modal-card-sm" role="dialog" aria-modal="true">
+      <header class="modal-head">
+        <h3 id="confirm-title">Confirmar</h3>
+        <button type="button" class="modal-x" data-close-modal="confirm" aria-label="Cerrar">×</button>
+      </header>
+      <p id="confirm-message" class="confirm-message"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn-uiverse ghost" data-close-modal="confirm">Cancelar</button>
+        <button type="button" id="confirm-ok" class="btn-uiverse danger"><span>Eliminar</span></button>
+      </div>
+    </div>
+  </div>
 
   <script src="config.js"></script>
   <script src="app.js"></script>

@@ -18,6 +18,8 @@ var app = builder.Build();
 app.UseCors();
 app.MapOpenApi();
 
+// Captura excepciones de PostgreSQL (constraints, triggers, SP).
+// No se "evitan" en el back: se dejan llegar desde la BD y se traducen a JSON.
 async Task<IResult> Safe(Func<Task<IResult>> action)
 {
     try
@@ -43,16 +45,6 @@ clientes.MapGet("/", async (ClienteService svc) =>
 clientes.MapPost("/", async (ClienteCreateDto dto, ClienteService svc) =>
     await Safe(async () =>
     {
-        if (string.IsNullOrWhiteSpace(dto.Cedula) || string.IsNullOrWhiteSpace(dto.Nombre))
-        {
-            return Results.Json(new ApiError
-            {
-                SqlState = "23502",
-                Tipo = "NOT_NULL",
-                Mensaje = "Cédula y nombre son obligatorios."
-            }, statusCode: StatusCodes.Status400BadRequest);
-        }
-
         await svc.CrearAsync(dto);
         return Results.Created($"/api/clientes/{dto.Cedula}", dto);
     }));
@@ -60,16 +52,6 @@ clientes.MapPost("/", async (ClienteCreateDto dto, ClienteService svc) =>
 clientes.MapPut("/{cedula}", async (string cedula, ClienteUpdateDto dto, ClienteService svc) =>
     await Safe(async () =>
     {
-        if (string.IsNullOrWhiteSpace(dto.Nombre))
-        {
-            return Results.Json(new ApiError
-            {
-                SqlState = "23502",
-                Tipo = "NOT_NULL",
-                Mensaje = "El nombre es obligatorio."
-            }, statusCode: StatusCodes.Status400BadRequest);
-        }
-
         var ok = await svc.ActualizarAsync(cedula, dto);
         return ok ? Results.NoContent() : Results.NotFound();
     }));
@@ -88,16 +70,6 @@ productos.MapGet("/", async (ProductoService svc) =>
 productos.MapPost("/", async (ProductoCreateDto dto, ProductoService svc) =>
     await Safe(async () =>
     {
-        if (string.IsNullOrWhiteSpace(dto.Nombre))
-        {
-            return Results.Json(new ApiError
-            {
-                SqlState = "23502",
-                Tipo = "NOT_NULL",
-                Mensaje = "El nombre del producto es obligatorio."
-            }, statusCode: StatusCodes.Status400BadRequest);
-        }
-
         var id = await svc.CrearAsync(dto);
         return Results.Created($"/api/productos/{id}", new { idProducto = id });
     }));
@@ -105,16 +77,6 @@ productos.MapPost("/", async (ProductoCreateDto dto, ProductoService svc) =>
 productos.MapPut("/{id:int}", async (int id, ProductoUpdateDto dto, ProductoService svc) =>
     await Safe(async () =>
     {
-        if (string.IsNullOrWhiteSpace(dto.Nombre))
-        {
-            return Results.Json(new ApiError
-            {
-                SqlState = "23502",
-                Tipo = "NOT_NULL",
-                Mensaje = "El nombre del producto es obligatorio."
-            }, statusCode: StatusCodes.Status400BadRequest);
-        }
-
         var ok = await svc.ActualizarAsync(id, dto);
         return ok ? Results.NoContent() : Results.NotFound();
     }));
