@@ -1,0 +1,2 @@
+*.sh text eol=lf
+scripts/init-db.sh text eol=lf

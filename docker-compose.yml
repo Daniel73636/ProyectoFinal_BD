@@ -18,6 +18,24 @@ services:
       timeout: 5s
       retries: 10
 
+  # Carga estructura + lógica por Docker (sin rutas locales del host)
+  # Uso: docker compose run --rm db-init
+  db-init:
+    image: postgres:16
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    volumes:
+      - ./tienda_deportes_estructura.sql:/scripts/tienda_deportes_estructura.sql:ro
+      - ./tienda_deportes_logica.sql:/scripts/tienda_deportes_logica.sql:ro
+      - ./scripts/init-db.sh:/init-db.sh:ro
+    entrypoint: ["sh", "/init-db.sh"]
+    restart: "no"
+
   api:
     build:
       context: ./Backend/TiendaDeportes.Api
@@ -41,7 +59,7 @@ services:
     depends_on:
       - api
 
-  # Consola de prueba rápida (opcional): docker compose run --rm console
+  # Consola de prueba: docker compose --profile console run --rm console
   console:
     build:
       context: ./Backend/TiendaDeportes.Console

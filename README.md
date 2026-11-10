@@ -1,6 +1,7 @@
 # Tienda Deportes — Trabajo Final BD + C#
 
-Proyecto de **tienda de deportes** con PostgreSQL y C# (API + panel web).  
+Proyecto de **tienda de deportes** con PostgreSQL y C# (API + panel web), todo en **Docker** para no depender de rutas ni instalaciones locales (.NET, PostgreSQL, etc.).
+
 Cumple el enunciado: BD relacional con integridad referencial, constraints, índices, procedimientos, triggers y CRUD de dos tablas con manejo de excepciones.
 
 **Equipo:** David, Daniel y Josué  
@@ -18,7 +19,57 @@ Cumple el enunciado: BD relacional con integridad referencial, constraints, índ
 | Triggers | `trg_control_stock`, `trg_auditoria_precio` |
 | Procedimientos | `sp_registrar_venta`, `sp_reponer_stock` |
 | CRUD | Tablas **cliente** y **producto** (C# + panel) |
-| Excepciones | Captura de `SqlState` (23505, 23001, 23503, 23502, 23514, 22P02, 428C9, P0001…) sin que el programa cancele |
+| Excepciones | Captura de `SqlState` sin que el programa cancele |
+
+---
+
+## Requisitos
+
+Solo **Docker Desktop** (o Docker Engine + Compose).  
+Puertos libres: `5432`, `8080`, `8088`.
+
+No hace falta instalar .NET ni PostgreSQL en el PC.
+
+---
+
+## Cómo ejecutar (solo Docker)
+
+Desde la carpeta del repositorio (después de clonar):
+
+```bash
+docker compose up -d --build
+docker compose run --rm db-init
+```
+
+1. `up` levanta **db**, **api** y **frontend** en contenedores.  
+2. `db-init` crea la BD y ejecuta los `.sql` **dentro de Docker** (sin rutas locales).
+
+### Abrir
+- **Panel CRUD:** http://localhost:8088  
+- **API:** http://localhost:8080  
+- **Health:** http://localhost:8080/api/health  
+
+### Cadena (dentro de Docker la API usa `Host=db`)
+```
+Host=localhost;Port=5432;Database=tienda_deportes;Username=postgres;Password=postgres
+```
+
+### Detener
+```bash
+docker compose down
+```
+
+Borrar también los datos:
+```bash
+docker compose down -v
+```
+
+### Reinicio limpio (demo)
+```bash
+docker compose down -v
+docker compose up -d --build
+docker compose run --rm db-init
+```
 
 ---
 
@@ -26,46 +77,13 @@ Cumple el enunciado: BD relacional con integridad referencial, constraints, índ
 
 ```
 ProyectoFinal_BD/
-├── tienda_deportes_estructura.sql   # Tablas, constraints, índices, datos
-├── tienda_deportes_logica.sql       # Triggers + procedimientos (Bloque B)
-├── modelo_tienda_deportes.pdf
 ├── docker-compose.yml
-├── scripts/init-db.ps1
-├── Backend/
-│   ├── TiendaDeportes.Api/          # API ASP.NET + Npgsql
-│   └── TiendaDeportes.Console/      # Prueba rápida de conexión
-└── Frontend/                        # Panel CRUD (modales + notificaciones)
-```
-
----
-
-## Cómo ejecutar (Docker)
-
-### Requisitos
-- Docker Desktop encendido
-- Puertos libres: `5432`, `8080`, `8088`
-
-### 1. Levantar servicios
-```powershell
-cd "C:\Users\danie\Desktop\Semestre 4\ProyectoFinal_BD"
-docker compose up -d --build
-```
-
-### 2. Cargar la base de datos (primera vez o BD vacía)
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\init-db.ps1
-```
-
-Eso crea `tienda_deportes`, ejecuta el script de **estructura** (si hace falta) y luego el de **lógica** (SP + triggers).
-
-### 3. Abrir el panel
-- **Front:** http://localhost:8088  
-- **API:** http://localhost:8080  
-- **Health:** http://localhost:8080/api/health  
-
-### Cadena de conexión
-```
-Host=localhost;Port=5432;Database=tienda_deportes;Username=postgres;Password=postgres
+├── tienda_deportes_estructura.sql
+├── tienda_deportes_logica.sql
+├── scripts/init-db.sh          # init 100% Docker
+├── Backend/TiendaDeportes.Api/
+├── Backend/TiendaDeportes.Console/
+└── Frontend/
 ```
 
 ---
@@ -74,26 +92,27 @@ Host=localhost;Port=5432;Database=tienda_deportes;Username=postgres;Password=pos
 
 1. Pestaña **Productos** o **Clientes**
 2. Formulario superior → **crear**
-3. En cada tarjeta → **Editar** (modal) / **Eliminar** (confirmación)
-4. Los errores de PostgreSQL (constraints, FK, triggers) llegan como **notificaciones** con código `SqlState` y motivo
+3. En cada tarjeta → **Editar** (modal) / **Eliminar**
+4. Errores de PostgreSQL → notificaciones con `SqlState` y motivo
 
 Ejemplos para la demo:
-- Cliente con cédula duplicada → `23505`
+- Cédula duplicada → `23505`
 - Precio negativo → `23514`
-- Borrar cliente/producto con dependencias → `23001`
+- Borrar con dependencias → `23001`
 
 ---
 
-## Probar SP y triggers en SQL
+## Probar SP y triggers (también por Docker)
+
+```bash
+docker compose exec db psql -U postgres -d tienda_deportes
+```
+
+Dentro de `psql`:
 
 ```sql
--- Registrar venta (dispara trg_control_stock)
 CALL sp_registrar_venta('1001234567', 1, 1, 2);
-
--- Reponer stock
 CALL sp_reponer_stock(1, 5);
-
--- Ver auditoría (dispara trg_auditoria_precio al cambiar precio)
 UPDATE producto SET precio = precio + 1000 WHERE id_producto = 2;
 SELECT * FROM auditoria_precio ORDER BY id_auditoria DESC;
 ```
@@ -102,33 +121,14 @@ SELECT * FROM auditoria_precio ORDER BY id_auditoria DESC;
 
 ## Manejo de errores (sustentación)
 
-Archivo clave del backend:
+Archivo: `Backend/TiendaDeportes.Api/Services/PostgresErrorMapper.cs`
 
-`Backend/TiendaDeportes.Api/Services/PostgresErrorMapper.cs`
-
-Ahí se traduce `PostgresException.SqlState` a un JSON que el front muestra.  
-La BD **aplica** las reglas; el programa **captura** y no se cierra.
+La BD aplica constraints/triggers; el backend captura `PostgresException` y el front muestra código + motivo. El programa no se cancela.
 
 ---
 
-## Consola de prueba (opcional)
+## Consola C# de prueba (opcional)
 
-```powershell
-docker compose run --rm console
-```
-
-Lista los nombres de productos para verificar conexión.
-
----
-
-## Detener
-
-```powershell
-docker compose down
-```
-
-Para borrar también los datos del volumen:
-
-```powershell
-docker compose down -v
+```bash
+docker compose --profile console run --rm console
 ```
